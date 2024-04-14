@@ -46,6 +46,8 @@ elif args.dataset_name_or_path == 'conll2003':
     label2id = {'O': 0, 'B-PER': 1, 'I-PER': 2, 'B-ORG': 3, 'I-ORG': 4, 'B-LOC': 5, 'I-LOC': 6, 'B-MISC': 7, 'I-MISC': 8}
 elif args.dataset_name_or_path == 't-pas':
     ds = load_dataset('theGhoul21/t-pas-train-light-3')
+    ds_test = load_dataset('theGhoul21/t-pas-test-light-3')
+    ds['test'] = ds_test['train']
     # ds['output'] contains the classes, we need to convert them to ids, after removing duplicates
     label2id = {label: i for i, label in enumerate(set([label for labels in ds['train']['output'] for label in labels]))}
 else:
@@ -73,7 +75,8 @@ tokenized_ds = ds.map(tokenize_and_align_labels, batched=True)
 data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
 model = MODEL.from_pretrained(
     args.model_name_or_path, num_labels=len(label2id), id2label=id2label, label2id=label2id
-).bfloat16()
+).bfloat16().to('cuda')
+model.to('cuda')
 peft_config = LoraConfig(task_type=TaskType.TOKEN_CLS,
                          inference_mode=False,
                          r=args.lora_r, lora_alpha=args.lora_alpha, lora_dropout=args.lora_dropout)
@@ -114,7 +117,6 @@ training_args = TrainingArguments(
     push_to_hub=args.push_to_hub,
     hub_model_id=args.hub_model_id,
 )
-
 trainer = Trainer(
     model=model,
     args=training_args,
@@ -125,7 +127,7 @@ trainer = Trainer(
     compute_metrics=compute_metrics,
 )
 
-# trainer.train()
+trainer.train()
 # push the best model to the hub
-# if args.push_to_hub:
-#     trainer.push_to_hub()
+if args.push_to_hub:
+    trainer.push_to_hub()
